@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-area="admin">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>JES 2026 — Painel do Organizador</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="icon" type="image/png" href="img/logo-128.png">
+  <script>(function(){var t;try{t=localStorage.getItem('jes2026_categoria')}catch(e){}if(t!=='manha'&&t!=='tarde'){t=new Date().getHours()<12?'manha':'tarde'}document.documentElement.setAttribute('data-turno',t);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='tarde'?'#0B0C0F':'#FFFFFF')})();</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js">
+  <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,800;0,900;1,700;1,800;1,900&family=Barlow:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="admin">
+  <div class="boot" id="boot-loader" role="status" aria-live="polite">
+    <div class="boot__arena"><img class="boot__logo" src="img/logo-128.png" alt="" width="96" height="96"></div>
+    <div class="boot__quadra" aria-hidden="true"><span class="boot__sombra"></span><span class="boot__bola"></span></div>
+    <p class="boot__texto">Abrindo a mesa de controle…</p>
+  </div>
+
+  <header class="adm-top">
+    <a href="home.html" class="brand brand--adm" title="Abrir o site público" target="_blank" rel="noopener">
+      <img src="img/logo-128.png" alt="" width="40" height="40">
+      <span class="brand__texto"><strong>Painel JES</strong><small>Mesa de controle</small></span>
+    </a>
+    <div class="adm-top__centro">
+      <span class="adm-top__turno" data-turno-descricao>7º e 8º anos</span>
+      <div class="turno-switch" id="turno-switch" role="radiogroup" aria-label="Turno">
+        <button type="button" class="turno-switch__opt" role="radio" data-turno-opcao="manha" aria-checked="false" title="Manhã · 7º e 8º anos"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2.5M12 20v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M1.5 12H4M20 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></svg><span>Manhã</span></button>
+        <button type="button" class="turno-switch__opt" role="radio" data-turno-opcao="tarde" aria-checked="false" title="Tarde · 9º ano ao 3º ano EM"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.2A8.5 8.5 0 1 1 9.8 3.5a6.8 6.8 0 0 0 10.7 10.7z"/></svg><span>Tarde</span></button>
+      </div>
+    </div>
+    <div class="adm-top__acoes">
+      <span class="sync-pill" id="sync-pill" data-rotulo-online="Sincronizado"></span>
+      <div class="user-chip"><span class="user-chip__avatar" id="user-avatar">·</span><span class="user-chip__info"><b id="user-greeting">…</b><small id="admin-role-badge"></small></span></div>
+      <button type="button" id="btn-sair" class="icon-btn" title="Sair" aria-label="Sair do painel"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10"/></svg></button>
+    </div>
+  </header>
+
+  <div class="adm-shell">
+    <nav class="adm-nav" aria-label="Seções do painel">
+      <button type="button" class="adm-nav__item is-ativo" data-view="aovivo" aria-current="page"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg><span>Ao vivo</span><b class="adm-nav__badge" id="badge-aovivo" hidden>0</b></button>
+      <button type="button" class="adm-nav__item" data-view="jogos"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16.5" rx="2"/><path d="M16 2.5v4M8 2.5v4M3 10h18"/></svg><span>Jogos</span></button>
+      <button type="button" class="adm-nav__item master-only" data-view="classificacao"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21V12h4v9M10 21V5h4v16M16 21v-6h4v6"/></svg><span>Classificação</span></button>
+      <button type="button" class="adm-nav__item master-only" data-view="cadastros"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></svg><span>Cadastros</span></button>
+    </nav>
+
+    <main class="adm-main">
+      <!-- AO VIVO: seletor de partidas ou mesa de controle -->
+      <section class="adm-view" id="view-aovivo" aria-label="Ao vivo">
+        <div id="live-panel">
+          <div class="view-head"><div><div class="skeleton sk-linha" style="width:140px"></div><div class="skeleton" style="width:260px;height:38px;margin-top:10px"></div></div></div>
+          <div class="partidas-grid"><div class="skeleton" style="height:190px"></div><div class="skeleton" style="height:190px"></div></div>
+        </div>
+      </section>
+
+      <!-- JOGOS: agenda completa -->
+      <section class="adm-view" id="view-jogos" aria-label="Jogos" hidden>
+        <div class="view-head">
+          <div>
+            <span class="view-kicker">Turno da <span data-turno-nome>Manhã</span> · <span data-turno-descricao>7º e 8º anos</span></span>
+            <h1 class="view-titulo">Jogos</h1>
+            <p class="view-sub">Agenda completa do turno. Toque em “Controlar” para abrir a mesa da partida.</p>
+          </div>
+          <button type="button" class="btn btn--primario master-only" data-acao-global="novo-jogo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Novo jogo</button>
+        </div>
+        <div class="toolbar">
+          <label class="campo-busca"><span class="sr-only">Buscar</span><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg><input type="search" id="busca-jogos" placeholder="Buscar equipe, local ou esporte…" autocomplete="off"></label>
+          <label class="campo-select"><span>Modalidade</span><select id="filtro-modalidade"><option value="all">Todas</option></select></label>
+          <div class="segmentado" id="filtro-periodo-jogos" role="group" aria-label="Data">
+            <button type="button" data-valor="all" class="is-ativo" aria-pressed="true">Todas as datas</button>
+            <button type="button" data-valor="today" aria-pressed="false">Hoje</button>
+            <button type="button" data-valor="next" aria-pressed="false">Próximas</button>
+          </div>
+          <div class="segmentado" id="filtro-status-jogos" role="group" aria-label="Status">
+            <button type="button" data-valor="all" class="is-ativo" aria-pressed="true">Todos</button>
+            <button type="button" data-valor="AO VIVO" aria-pressed="false">Ao vivo</button>
+            <button type="button" data-valor="EM BREVE" aria-pressed="false">Em breve</button>
+            <button type="button" data-valor="FINALIZADO" aria-pressed="false">Encerrados</button>
+          </div>
+        </div>
+        <div id="lista-jogos" class="agenda"></div>
+      </section>
+
+      <!-- CLASSIFICAÇÃO (master) -->
+      <section class="adm-view master-only" id="view-classificacao" aria-label="Classificação" hidden>
+        <div class="view-head">
+          <div>
+            <span class="view-kicker">Turno da <span data-turno-nome>Manhã</span> · <span data-turno-descricao>7º e 8º anos</span></span>
+            <h1 class="view-titulo">Classificação</h1>
+            <p class="view-sub">Some pontos às equipes — o ranking público atualiza na hora.</p>
+          </div>
+          <button type="button" class="btn btn--primario" data-acao-global="registrar-pontos"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registrar pontos</button>
+        </div>
+        <div class="classif-grid">
+          <div id="lista-classificacao" class="lista"></div>
+          <div id="pontos-detalhe-container"></div>
+        </div>
+      </section>
+
+      <!-- CADASTROS (master) -->
+      <section class="adm-view master-only" id="view-cadastros" aria-label="Cadastros" hidden>
+        <div class="view-head">
+          <div>
+            <span class="view-kicker">Turno da <span data-turno-nome>Manhã</span> · <span data-turno-descricao>7º e 8º anos</span></span>
+            <h1 class="view-titulo">Cadastros</h1>
+            <p class="view-sub" id="cadastro-descricao"></p>
+          </div>
+          <button type="button" class="btn btn--primario" id="btn-cadastro-novo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span id="btn-cadastro-novo-texto">Nova equipe</span></button>
+        </div>
+        <div class="segmentado cadastros-abas" id="abas-cadastro" role="group" aria-label="Tipo de cadastro">
+          <button type="button" data-valor="equipes" class="is-ativo" aria-pressed="true">Equipes</button>
+          <button type="button" data-valor="modalidades" aria-pressed="false">Modalidades</button>
+          <button type="button" data-valor="regulamentos" aria-pressed="false">Regulamentos</button>
+          <button type="button" data-valor="usuarios" aria-pressed="false">Usuários</button>
+        </div>
+        <div id="cadastro-conteudo" class="lista"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: NOVO/EDITAR JOGO -->
+  <div class="modal-overlay" id="modal-novo-jogo" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-jogo">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="titulo-modal-jogo">Novo jogo</h3>
+        <button class="modal-close" type="button" aria-label="Fechar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-novo-jogo" novalidate>
+        <input type="hidden" id="jogo-edit-id" value="">
+        <div class="field-group"><label for="modalidade">Modalidade</label><select id="modalidade" required></select></div>
+        <div class="dica-regra" id="dica-regra-jogo" hidden></div>
+        <div class="form-row">
+          <div class="field-group"><label for="time_a">Equipe 1 (esquerda)</label><select id="time_a" required></select></div>
+          <div class="field-group"><label for="time_b">Equipe 2 (direita)</label><select id="time_b" required></select></div>
+        </div>
+        <div class="form-row">
+          <div class="field-group"><label for="data">Data</label><input type="date" id="data" required></div>
+          <div class="field-group"><label for="horario">Horário</label><input type="time" id="horario" required></div>
+        </div>
+        <div class="field-group"><label for="local">Local</label><input type="text" id="local" placeholder="Ex.: Ginásio Central" list="locais-sugeridos" maxlength="60"><datalist id="locais-sugeridos"></datalist></div>
+        <details class="regras-partida" id="regras-partida" hidden>
+          <summary><span>Regras desta partida</span><small id="regras-resumo"></small></summary>
+          <div class="regras-partida__campos" id="regras-campos"></div>
+        </details>
+        <div class="form-row">
+          <div class="field-group"><label for="status_jogo">Status</label><select id="status_jogo"><option value="EM BREVE">Em breve</option><option value="AO VIVO">Ao vivo</option><option value="PAUSADO">Pausado</option><option value="FINALIZADO">Encerrado</option></select></div>
+          <div class="field-group"><span class="rotulo" id="rotulo-placar">Placar</span><div class="placar-inputs"><input type="number" id="placar_a" min="0" value="0" inputmode="numeric" aria-label="Placar da equipe 1"><span>×</span><input type="number" id="placar_b" min="0" value="0" inputmode="numeric" aria-label="Placar da equipe 2"></div></div>
+        </div>
+        <div class="field-group" id="campo-parciais" hidden><label for="parciais">Parciais dos sets</label><input type="text" id="parciais" placeholder="Ex.: 25-20, 22-25, 15-12" autocomplete="off"><span class="field-hint">Opcional. Com as parciais, o placar de sets é calculado sozinho.</span></div>
+        <div class="modal-footer"><button type="button" class="btn btn--ghost btn-cancel">Cancelar</button><button type="submit" class="btn btn--primario">Salvar jogo</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CADASTRAR/EDITAR EQUIPE -->
+  <div class="modal-overlay" id="modal-equipe" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-equipe">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="titulo-modal-equipe">Nova equipe</h3>
+        <button class="modal-close" type="button" aria-label="Fechar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-equipe" novalidate>
+        <input type="hidden" id="equipe-edit-id" value="">
+        <div class="field-group">
+          <span class="rotulo">Brasão ou foto da equipe</span>
+          <div class="brasao-upload">
+            <div class="brasao-preview" id="brasao-preview"></div>
+            <div class="brasao-upload__acoes">
+              <input type="file" id="brasao-input" accept="image/*" hidden>
+              <button type="button" class="btn btn--secundario btn--sm" id="btn-escolher-brasao">Escolher imagem</button>
+              <button type="button" class="btn btn--perigo btn--sm" id="btn-remover-brasao" hidden>Remover</button>
+            </div>
+          </div>
+          <span class="field-hint">Sem imagem, o site mostra um escudo com a sigla da turma.</span>
+        </div>
+        <div class="field-group"><label for="nome_equipe">Nome da equipe</label><input type="text" id="nome_equipe" placeholder="Ex.: 8º Ano B" required maxlength="40"></div>
+        <div class="field-group"><label for="turma">Série</label><select id="turma" required></select><span class="field-hint" id="dica-series"></span></div>
+        <div class="modal-footer"><button type="button" class="btn btn--ghost btn-cancel">Cancelar</button><button type="submit" class="btn btn--primario" id="btn-salvar-equipe">Cadastrar</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: NOVA/EDITAR MODALIDADE -->
+  <div class="modal-overlay" id="modal-modalidade" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-modalidade">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="titulo-modal-modalidade">Nova modalidade</h3>
+        <button class="modal-close" type="button" aria-label="Fechar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-modalidade" novalidate>
+        <input type="hidden" id="modalidade-edit-id" value="">
+        <div class="field-group"><label for="nome_modalidade">Nome</label><input type="text" id="nome_modalidade" placeholder="Ex.: Futsal" required list="sugestoes-modalidades" maxlength="30" autocomplete="off">
+          <datalist id="sugestoes-modalidades"><option value="Futsal"><option value="Basquete"><option value="Vôlei"><option value="Handebol"><option value="Ping-Pong"><option value="Pebolim"><option value="Xadrez"></datalist>
+        </div>
+        <div class="form-row">
+          <div class="field-group"><label for="genero_modalidade">Gênero</label><select id="genero_modalidade" required><option value="MASCULINO">Masculino</option><option value="FEMININO">Feminino</option><option value="MISTO">Misto</option></select></div>
+          <div class="field-group"><label for="cor_modalidade">Cor do ícone</label><input type="color" id="cor_modalidade" value="#E30613"></div>
+        </div>
+        <div class="dica-regra" id="dica-regra-modalidade"></div>
+        <div class="modal-footer"><button type="button" class="btn btn--ghost btn-cancel">Cancelar</button><button type="submit" class="btn btn--primario">Salvar modalidade</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: REGISTRAR PONTOS -->
+  <div class="modal-overlay" id="modal-ponto" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-ponto">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="titulo-modal-ponto">Registrar pontos</h3>
+        <button class="modal-close" type="button" aria-label="Fechar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-ponto" novalidate>
+        <div class="field-group"><label for="ponto_equipe">Equipe</label><select id="ponto_equipe" required></select></div>
+        <div class="field-group"><label for="ponto_jogo">Jogo de origem</label><select id="ponto_jogo"></select><span class="field-hint">Pontos ligados a um jogo também contam na classificação daquele esporte.</span></div>
+        <div class="form-row">
+          <div class="field-group"><label for="ponto_quantidade">Pontos</label><input type="number" id="ponto_quantidade" min="1" value="3" required inputmode="numeric"></div>
+          <div class="field-group"><label for="ponto_descricao">Descrição</label><input type="text" id="ponto_descricao" placeholder="Ex.: Vitória" maxlength="60"></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn--ghost btn-cancel">Cancelar</button><button type="submit" class="btn btn--primario">Registrar</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITAR REGULAMENTO -->
+  <div class="modal-overlay" id="modal-regulamento" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-regulamento">
+    <div class="modal-card modal-card--wide">
+      <div class="modal-header">
+        <h3 class="modal-title" id="titulo-modal-regulamento">Regulamento</h3>
+        <button class="modal-close" type="button" aria-label="Fechar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-regulamento" novalidate>
+        <input type="hidden" id="regulamento-modalidade" value="">
+        <div class="field-group"><label for="reg-visao-geral">Visão geral</label><textarea id="reg-visao-geral" rows="3" placeholder="Resumo da modalidade para os estudantes"></textarea></div>
+        <div class="field-group">
+          <span class="rotulo">Regras</span>
+          <div id="reg-regras-container"></div>
+          <button type="button" class="btn btn--secundario btn--sm" id="btn-add-regra" style="justify-self:start">+ Adicionar regra</button>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn--ghost btn-cancel">Cancelar</button><button type="submit" class="btn btn--primario">Salvar regulamento</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: NOVO/EDITAR USUÁRIO -->
+  <div class="modal-overlay" id="modal-usuario" role="dialog" aria-modal="true" aria-labelledby="titulo-modal-usuario">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="titulo-modal-usuario">Novo usuário</h3>
+        <button class="modal-close" type="button" aria-label="Fechar"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <form class="modal-form" id="form-usuario" novalidate>
+        <input type="hidden" id="usuario-edit-id" value="">
+        <div class="field-group"><label for="nome_usuario">Nome</label><input type="text" id="nome_usuario" placeholder="Ex.: João (mesário)" required maxlength="40"></div>
+        <div class="field-group"><label for="email_usuario">E-mail</label><input type="email" id="email_usuario" placeholder="nome@email.com" required autocomplete="off"></div>
+        <div class="field-group"><label for="senha_usuario">Senha</label><input type="text" id="senha_usuario" placeholder="Senha de acesso" required autocomplete="new-password"></div>
+        <div class="form-row">
+          <div class="field-group"><label for="role_usuario">Tipo</label><select id="role_usuario"><option value="mesario">Mesário — controla partidas</option><option value="master">Administrador — acesso total</option></select></div>
+          <div class="field-group"><label for="categoria_usuario">Turno</label><select id="categoria_usuario"><option value="ambas">Ambos os turnos</option><option value="manha">Só manhã</option><option value="tarde">Só tarde</option></select></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn--ghost btn-cancel">Cancelar</button><button type="submit" class="btn btn--primario">Salvar usuário</button></div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/ui.js"></script>
+  <script src="js/regulamentos.js"></script>
+  <script type="module" src="js/firebase-setup.js"></script>
+  <script type="module" src="js/app.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

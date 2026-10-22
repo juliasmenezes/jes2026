@@ -1,0 +1,88 @@
+{
+  "credenciais": [
+    { "email": "organizador@jes2026.com", "senha": "jes2026" }
+  ],
+  "modalidades": [
+    { "id": 1, "nome": "Futsal", "genero": "MASCULINO", "cor": "#2563EB" },
+    { "id": 2, "nome": "Futsal", "genero": "FEMININO", "cor": "#2563EB" },
+    { "id": 3, "nome": "Basquete", "genero": "MASCULINO", "cor": "#D97706" },
+    { "id": 4, "nome": "Basquete", "genero": "FEMININO", "cor": "#D97706" },
+    { "id": 5, "nome": "Vôlei", "genero": "MASCULINO", "cor": "#7C3AED" },
+    { "id": 6, "nome": "Vôlei", "genero": "FEMININO", "cor": "#7C3AED" },
+    { "id": 7, "nome": "Handebol", "genero": "MASCULINO", "cor": "#059669" },
+    { "id": 8, "nome": "Handebol", "genero": "FEMININO", "cor": "#059669" },
+    { "id": 9, "nome": "Ping-Pong", "genero": "MISTO", "cor": "#DC2626" },
+    { "id": 10, "nome": "Pebolim", "genero": "MISTO", "cor": "#0891B2" },
+    { "id": 11, "nome": "Xadrez", "genero": "MISTO", "cor": "#4B5563" }
+  ],
+  "equipes": [
+    { "id": 1, "nome": "1º Ano A", "turma": "Ensino Médio" },
+    { "id": 2, "nome": "1º Ano B", "turma": "Ensino Médio" },
+    { "id": 3, "nome": "2º Ano A", "turma": "Ensino Médio" },
+    { "id": 4, "nome": "2º Ano B", "turma": "Ensino Médio" },
+    { "id": 5, "nome": "3º Ano A", "turma": "Ensino Médio" },
+    { "id": 6, "nome": "3º Ano B", "turma": "Ensino Médio" }
+  ],
+  "jogos": [
+    {
+      "id": "jogo-1",
+      "modalidade": "Futsal",
+      "genero": "MASCULINO",
+      "data": "2026-09-24",
+      "horario": "14:20",
+      "local": "Ginásio Central",
+      "timeA": "3º Ano A",
+      "timeB": "3º Ano B",
+      "placarA": 3,
+      "placarB": 2,
+      "status": "AO VIVO"
+    },
+    {
+      "id": "jogo-2",
+      "modalidade": "Basquete",
+      "genero": "MASCULINO",
+      "data": "2026-09-24",
+      "horario": "15:30",
+      "local": "Quadra Externa",
+      "timeA": "2º Ano A",
+      "timeB": "2º Ano B",
+      "placarA": 0,
+      "placarB": 0,
+      "status": "EM BREVE"
+    },
+    {
+      "id": "jogo-3",
+      "modalidade": "Vôlei",
+      "genero": "FEMININO",
+      "data": "2026-09-24",
+      "horario": "16:00",
+      "local": "Ginásio Central",
+      "timeA": "1º Ano A",
+      "timeB": "1º Ano B",
+      "placarA": 0,
+      "placarB": 0,
+      "status": "EM BREVE"
+    },
+    {
+      "id": "jogo-4",
+      "modalidade": "Handebol",
+      "genero": "MASCULINO",
+      "data": "2026-09-24",
+      "horario": "17:00",
+      "local": "Quadra Externa",
+      "timeA": "3º Ano A",
+      "timeB": "2º Ano A",
+      "placarA": 0,
+      "placarB": 0,
+      "status": "EM BREVE"
+    }
+  ],
+  "classificacao": [
+    { "posicao": 1, "unidade": "3º Ano A", "pontos": 450 },
+    { "posicao": 2, "unidade": "3º Ano B", "pontos": 415 },
+    { "posicao": 3, "unidade": "2º Ano A", "pontos": 380 },
+    { "posicao": 4, "unidade": "1º Ano A", "pontos": 300 },
+    { "posicao": 5, "unidade": "1º Ano B", "pontos": 250 },
+    { "posicao": 6, "unidade": "2º Ano B", "pontos": 200 }
+  ]
+}
