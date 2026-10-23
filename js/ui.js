@@ -159,6 +159,8 @@ var ICONES = {
   mais_opcoes: '<circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/>',
   busca: '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.3-4.3"/>',
   nota: '<path d="M5 4h10l4 4v12H5z"/><path d="M14 4v5h5M8.5 13h7M8.5 16.5h5"/>',
+  som: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/>',
+  mudo: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/>',
   wifi_off: '<path d="M2 8.5a15 15 0 0 1 5-2.9M22 8.5A15 15 0 0 0 11 4.6M5.5 12a10 10 0 0 1 3.2-1.9M18.5 12a10 10 0 0 0-2.6-1.7M9 15.5a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/><path d="M3 3l18 18"/>'
 };
 
@@ -742,6 +744,121 @@ var JESFX = (function () {
     return c;
   }
 
+  /* ---- Avisos discretos (público) ----
+     Cartão pequeno, sem faixas, confete ou tela cheia. nivel 'palco': partida em foco na aba
+     Ao vivo (canto superior). nivel 'leve': qualquer outra aba/partida (canto inferior, menor). */
+  var avisos = {};
+  var DURACAO_AVISO = { palco: 3400, fim: 5200, leve: 2800 };
+
+  function raizAvisos(nivel) {
+    var id = 'lance-avisos-' + nivel;
+    var el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = id;
+      el.className = 'lance-avisos lance-avisos--' + nivel;
+      el.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  function fecharAviso(registro) {
+    clearTimeout(registro.timer);
+    if (avisos[registro.chave] === registro) delete avisos[registro.chave];
+    registro.el.classList.add('is-saindo');
+    setTimeout(function () { if (registro.el.parentNode) registro.el.parentNode.removeChild(registro.el); }, MOVIMENTO_REDUZIDO ? 30 : 260);
+  }
+
+  /* opts: { chave, variante, titulo, subtitulo, iconeHtml, nivel, duracao, acao: { rotulo, aoClicar } }
+     Avisos com a mesma chave (ex.: mesma partida) se atualizam em vez de empilhar. */
+  function aviso(opts) {
+    var nivel = opts.nivel === 'leve' ? 'leve' : 'palco';
+    var chave = nivel + ':' + (opts.chave || Math.random());
+    var html = (opts.iconeHtml ? '<span class="lance-aviso__ico">' + opts.iconeHtml + '</span>' : '') +
+      '<span class="lance-aviso__texto"><b>' + escapeHtml(opts.titulo) + '</b>' +
+      (opts.subtitulo ? '<small>' + escapeHtml(opts.subtitulo) + '</small>' : '') + '</span>' +
+      (opts.acao ? '<button type="button" class="lance-aviso__acao">' + escapeHtml(opts.acao.rotulo) + '</button>' : '');
+    var registro = avisos[chave];
+    if (registro) {
+      registro.el.className = 'lance-aviso lance-aviso--' + nivel + ' lance-aviso--' + (opts.variante || 'ponto') + ' is-atualizado';
+      registro.el.innerHTML = html;
+      void registro.el.offsetWidth;
+      clearTimeout(registro.timer);
+    } else {
+      var el = document.createElement('div');
+      el.className = 'lance-aviso lance-aviso--' + nivel + ' lance-aviso--' + (opts.variante || 'ponto');
+      el.innerHTML = html;
+      var raiz = raizAvisos(nivel);
+      raiz.appendChild(el);
+      registro = avisos[chave] = { el: el, chave: chave, timer: null };
+      while (raiz.children.length > 3) {
+        var antigo = raiz.firstElementChild;
+        Object.keys(avisos).forEach(function (k) { if (avisos[k].el === antigo) fecharAviso(avisos[k]); });
+        if (antigo.parentNode === raiz && raiz.children.length > 3) raiz.removeChild(antigo);
+      }
+    }
+    if (opts.acao) {
+      var botao = registro.el.querySelector('.lance-aviso__acao');
+      if (botao) botao.addEventListener('click', function () { fecharAviso(registro); opts.acao.aoClicar(); });
+      registro.el.classList.add('lance-aviso--clicavel');
+    }
+    var alvo = registro;
+    registro.timer = setTimeout(function () { fecharAviso(alvo); }, opts.duracao || DURACAO_AVISO[nivel]);
+  }
+
+  function emCaixaBaixa(txt) {
+    var t = String(txt || '').toLowerCase();
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  /* Texto curto do aviso para cada acontecimento (reaproveita as regras de conteudoPartida) */
+  function avisoPartida(jogo, info, c, nivel, acao) {
+    var regra = getRegraJogo(jogo);
+    var ev = info.evento;
+    var nome = ev ? nomeDoTime(jogo, ev.time) : '';
+    var placar = jogo.timeA + ' ' + jogo.placarA + ' × ' + jogo.placarB + ' ' + jogo.timeB;
+    var titulo = emCaixaBaixa(c.titulo).replace(/!$/, '');
+    var subtitulo = c.subtitulo || '';
+    var iconeHtml = '';
+
+    if (info.tipo === 'ponto') {
+      var rotulo = regra.tipo === 'gol' ? 'Gol' : regra.tipo === 'basquete' ? ({ 1: 'Lance livre', 2: 'Cesta de 2', 3: 'Cesta de 3' }[ev.valor] || 'Cesta') : 'Ponto';
+      titulo = rotulo + ' · ' + nome;
+      subtitulo = placar + (ev.minuto ? ' · ' + ev.minuto : '');
+      iconeHtml = iconeEsporte(jogo.modalidade);
+    } else if (info.tipo === 'set') {
+      subtitulo = c.subtitulo;
+      iconeHtml = icone('trofeu');
+    } else if (info.tipo === 'cartao') {
+      titulo = titulo + ' · ' + nome;
+      subtitulo = jogo.modalidade + ' · ' + jogo.timeA + ' × ' + jogo.timeB;
+      iconeHtml = iconeEvento(ev, jogo);
+    } else if (info.tipo === 'fim') {
+      subtitulo = (c.subtitulo ? c.subtitulo + ' · ' : '') + placar;
+      iconeHtml = icone('bandeira');
+    } else if (info.tipo === 'inicio' || info.tipo === 'retomada') {
+      iconeHtml = icone('play');
+    } else {
+      iconeHtml = icone('relogio');
+    }
+
+    /* O cartão só aparece com a página à vista; o som toca mesmo em segundo plano */
+    if (!document.hidden) {
+      aviso({
+        chave: jogo.id,
+        variante: c.variante,
+        titulo: titulo,
+        subtitulo: subtitulo,
+        iconeHtml: iconeHtml,
+        nivel: nivel,
+        duracao: info.tipo === 'fim' && nivel === 'palco' ? DURACAO_AVISO.fim : 0,
+        acao: acao
+      });
+    }
+    if (typeof JESAudio !== 'undefined') JESAudio.evento(info.tipo, c.variante, nivel);
+  }
+
   function partida(jogo, info, compacto) {
     var c = conteudoPartida(jogo, info);
     if (!c.variante) return;
@@ -749,12 +866,14 @@ var JESFX = (function () {
       c.compacto = true;
       c.subtitulo = c.subtitulo || (info.evento ? nomeDoTime(jogo, info.evento.time) : '');
       if (info.tipo === 'ponto' && info.evento) c.subtitulo = nomeDoTime(jogo, info.evento.time) + ' · ' + jogo.placarA + ' × ' + jogo.placarB;
+      banner(c);
+    } else {
+      avisoPartida(jogo, info, c, 'palco');
     }
-    banner(c);
     if (c.falado) anunciar(c.falado);
   }
 
-  return { banner: banner, confete: confete, bump: bump, partida: partida, conteudoPartida: conteudoPartida };
+  return { banner: banner, confete: confete, bump: bump, partida: partida, conteudoPartida: conteudoPartida, aviso: aviso, avisoPartida: avisoPartida };
 })();
 
 /* =====================================================
@@ -780,7 +899,7 @@ function criarObservadorPartidas(aoAcontecer) {
     var atual = {};
     jogos.forEach(function (j) { atual[j.id] = foto(j); });
 
-    if (base && liberado && sync.servidor && !document.hidden) {
+    if (base && liberado && sync.servidor) {
       var agora = Date.now();
       jogos.forEach(function (jogo) {
         var antes = base[jogo.id];
@@ -807,6 +926,42 @@ function criarObservadorPartidas(aoAcontecer) {
   };
 }
 
+/* Fora da aba Ao vivo: só pontuações viram um aviso bem leve, com atalho para a partida */
+function aoAcontecerForaDoAoVivo(jogo, info) {
+  if (info.tipo !== 'ponto') return;
+  var c = JESFX.conteudoPartida(jogo, info);
+  if (!c.variante) return;
+  JESFX.avisoPartida(jogo, info, c, 'leve', {
+    rotulo: 'Ver',
+    aoClicar: function () {
+      try { sessionStorage.setItem('jes2026_jogo_foco', jogo.id); } catch (e) { /* sem persistência */ }
+      window.location.href = 'home.html#ao-vivo';
+    }
+  });
+}
+
+/* Avisa (uma vez) quando o administrador libera os Valores Olímpicos com a página aberta */
+function criarObservadorValores() {
+  var anterior = null;
+  return function verificar() {
+    if (typeof valoresLiberados !== 'function') return;
+    var sync = getEstadoSync();
+    var agora = valoresLiberados();
+    if (sync.servidor && anterior === false && agora) {
+      var naClassificacao = /classificacao/.test(window.location.pathname);
+      if (!document.hidden) JESFX.aviso({
+        chave: 'valores', variante: 'valores', nivel: 'leve', duracao: 4200,
+        titulo: 'Valores Olímpicos divulgados',
+        subtitulo: naClassificacao ? 'A classificação geral foi atualizada' : 'Veja a classificação geral',
+        iconeHtml: icone('trofeu'),
+        acao: naClassificacao ? null : { rotulo: 'Ver', aoClicar: function () { window.location.href = 'classificacao.html'; } }
+      });
+      if (typeof JESAudio !== 'undefined') JESAudio.evento('valores', 'valores', 'leve');
+    }
+    if (sync.servidor) anterior = agora;
+  };
+}
+
 /* =====================================================
    CABEÇALHO PÚBLICO (navegação, turno, sincronização)
    ===================================================== */
@@ -823,11 +978,19 @@ function renderAdminBar() {
 function initPaginaPublica(renderizar) {
   initTurnoSwitch();
   initSyncPill();
+  /* A home (aba Ao vivo) tem seu próprio observador; as demais abas recebem o aviso leve de pontuações */
+  var observarFora = typeof renderHome === 'function' ? null : criarObservadorPartidas(aoAcontecerForaDoAoVivo);
+  var observarValores = criarObservadorValores();
+  var renderizarEObservar = function () {
+    renderizar();
+    if (observarFora) observarFora();
+    observarValores();
+  };
   onReady(function () {
     renderAdminBar();
-    renderizar();
+    renderizarEObservar();
     ocultarLoader();
-    onSync(renderizar);
+    onSync(renderizarEObservar);
     window.addEventListener('jes2026-categoria-changed', function () {
       renderizar();
       atualizarIndicadoresTurno();

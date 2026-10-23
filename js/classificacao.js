@@ -36,8 +36,11 @@ function renderClassificacao() {
     return Object.assign({}, item, estatisticasDaEquipe(item.unidade, encerrados));
   });
 
+  var comValores = modalidadeRanking === 'all' && valoresLiberados();
+  linhas.forEach(function (l) { l.comValores = comValores; });
   renderPodio(linhas);
   renderTabelaRanking(linhas);
+  document.getElementById('nota-valores').hidden = !comValores;
 }
 
 function estatisticasDaEquipe(nome, jogos) {
@@ -53,6 +56,14 @@ function estatisticasDaEquipe(nome, jogos) {
   });
   resultado.forma = resultado.forma.slice(-5);
   return resultado;
+}
+
+/* Com os Valores Olímpicos liberados, mostra de onde vem o total: jogos + valores */
+function htmlDetalheValores(item) {
+  if (!item.comValores) return '';
+  var v = item.valores;
+  return '<small class="' + (v < 0 ? 'is-negativo' : '') + '" title="Pontos dos jogos e Valores Olímpicos">' +
+    item.pontosJogos + (v < 0 ? ' − ' : ' + ') + Math.abs(v) + ' val.</small>';
 }
 
 /* Pódio só faz sentido com três equipes e alguém já pontuando */
@@ -93,7 +104,7 @@ function renderTabelaRanking(linhas) {
       '<span>' + item.v + '</span>' +
       '<span>' + item.e + '</span>' +
       '<span>' + item.d + '</span>' +
-      '<strong class="ranking-pts">' + item.pontos + '</strong>' +
+      '<strong class="ranking-pts">' + item.pontos + htmlDetalheValores(item) + '</strong>' +
       '<span class="forma">' + forma + '</span>' +
     '</div>';
   }).join(''));

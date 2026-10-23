@@ -3,18 +3,28 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="0; url=home.html">
-  <title>JES 2026</title>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0056b3">
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0056b3">
-  <link rel="apple-touch-icon" href="img/icon-192.png.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>JES 2026 — Jogos Estudantis SESI</title>
+  <meta name="description" content="Placar ao vivo, lance a lance, tabela e classificação dos Jogos Estudantis SESI 2026.">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="icon" type="image/png" href="img/logo-128.png">
+  <script>(function(){var t;try{t=localStorage.getItem('jes2026_categoria')}catch(e){}if(t!=='manha'&&t!=='tarde'){t=new Date().getHours()<12?'manha':'tarde'}document.documentElement.setAttribute('data-turno',t);var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',t==='tarde'?'#0B0C0F':'#FFFFFF')})();</script>
+  <style>
+    /* Moldura fixa do site: só segura o som e a página aberta dentro dela.
+       Como ela nunca recarrega, a música não para ao trocar de tela. */
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #FFFFFF; }
+    html[data-turno="tarde"], html[data-turno="tarde"] body { background: #0B0C0F; }
+    #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+    #sonda-seguranca { position: fixed; left: 0; bottom: 0; width: 0; height: 0; visibility: hidden; padding-bottom: env(safe-area-inset-bottom, 0px); padding-top: env(safe-area-inset-top, 0px); }
+  </style>
 </head>
 
 <body>
-  <script>window.location.replace('home.html');</script>
+  <iframe id="app" name="app" title="JES 2026" allow="autoplay; fullscreen"></iframe>
+  <div id="sonda-seguranca" aria-hidden="true"></div>
+  <noscript>Ative o JavaScript para acompanhar os Jogos Estudantis SESI 2026.</noscript>
+  <script src="js/audio.js"></script>
+  <script src="js/shell.js"></script>
 </body>
 
 </html>

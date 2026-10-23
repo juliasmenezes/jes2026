@@ -6,6 +6,11 @@
    ===================================================== */
 
 var jogoAoVivoSelecionado = null;
+/* Veio de um aviso em outra aba: abre direto na partida que pontuou */
+try {
+  jogoAoVivoSelecionado = sessionStorage.getItem('jes2026_jogo_foco') || null;
+  sessionStorage.removeItem('jes2026_jogo_foco');
+} catch (e) { /* sem persistência */ }
 var ultimoJogoNoPalco = null;
 var observarPartidas = criarObservadorPartidas(aoAcontecerNaPartida);
 
@@ -51,8 +56,8 @@ function renderHome() {
   observarPartidas();
 }
 
-/* Animações disparadas pelo observador: banner grande para a partida em foco,
-   aviso discreto (com atalho) para as outras */
+/* Animações disparadas pelo observador: aviso discreto para a partida em foco,
+   aviso ainda mais leve (com atalho) para as outras */
 function aoAcontecerNaPartida(jogo, info) {
   if (jogo.id === jogoAoVivoSelecionado) {
     JESFX.partida(jogo, info, false);
@@ -61,15 +66,11 @@ function aoAcontecerNaPartida(jogo, info) {
   if (info.tipo === 'retomada') return;
   var c = JESFX.conteudoPartida(jogo, info);
   if (!c.variante) return;
-  mostrarToast('<b>' + escapeHtml(c.titulo) + '</b> ' + escapeHtml(jogo.timeA) + ' ' + jogo.placarA + ' × ' + jogo.placarB + ' ' + escapeHtml(jogo.timeB), 'lance', {
-    html: true,
-    icone: iconeEsporte(jogo.modalidade),
-    acao: {
-      rotulo: 'Ver',
-      aoClicar: function () {
-        selecionarJogoAoVivo(jogo.id);
-        document.getElementById('ao-vivo').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+  JESFX.avisoPartida(jogo, info, c, 'leve', {
+    rotulo: 'Ver',
+    aoClicar: function () {
+      selecionarJogoAoVivo(jogo.id);
+      document.getElementById('ao-vivo').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
 }

@@ -6,7 +6,7 @@
    ===================================================== */
 
 import {
-  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc,
+  collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, setDoc,
   writeBatch, increment
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
@@ -61,6 +61,8 @@ var _db = {
   jogos: [],
   usuarios: [],
   pontosJogos: [],
+  valoresOlimpicos: [],   /* lançamentos de Valores Olímpicos: só o painel do organizador baixa */
+  valoresConfig: {},      /* { manha: { liberado, totais }, tarde: {...} }: público, só traz totais depois de liberado */
   regulamentos: {},
   _loaded: false,
   _servidor: false
@@ -128,10 +130,19 @@ var _PROCESSADORES = {
       };
     });
   },
+  config: function (snap) {
+    _db.valoresConfig = {};
+    snap.docs.forEach(function (d) {
+      if (d.id === 'valores_olimpicos') _db.valoresConfig = _mapValoresConfig(d.data());
+    });
+  },
+  valores_olimpicos: function (snap) { _db.valoresOlimpicos = snap.docs.map(_mapValor); },
   usuarios: function (snap) { _db.usuarios = snap.docs.map(_mapUsuario); }
 };
 
-/* Páginas públicas não baixam a coleção de usuários */
+/* Páginas públicas não baixam usuários nem os lançamentos de Valores Olímpicos
+   (eles só viram dado público quando o administrador libera os totais) */
+var _COLECOES_SO_ADMIN = ['usuarios', 'valores_olimpicos'];
 function _precisaUsuarios() {
   return document.documentElement.getAttribute('data-area') === 'admin';
 }
@@ -141,7 +152,7 @@ function _iniciarListeners() {
   if (!db) { _fireReady(); return; }
 
   var colecoes = Object.keys(_PROCESSADORES).filter(function (nome) {
-    return nome !== 'usuarios' || _precisaUsuarios();
+    return _COLECOES_SO_ADMIN.indexOf(nome) === -1 || _precisaUsuarios();
   });
   var pendentes = colecoes.slice();
 
@@ -257,6 +268,30 @@ function _mapUsuario(d) {
   var r = d.data();
   return { id: d.id, email: r.email, senha: r.senha, role: r.role, nome: r.nome, categoria: r.categoria || 'ambas' };
 }
+function _mapValor(d) {
+  var r = d.data();
+  return {
+    id: d.id,
+    equipeNome: r.equipe_nome,
+    pontos: Number(r.pontos) || 0,
+    criterio: r.criterio || '',
+    descricao: r.descricao || '',
+    categoria: r.categoria || 'manha',
+    criadoEm: Number(r.criado_em) || 0
+  };
+}
+function _mapValoresConfig(r) {
+  var saida = {};
+  CATEGORIAS.forEach(function (cat) {
+    var bloco = r && r[cat] && typeof r[cat] === 'object' ? r[cat] : {};
+    var totais = {};
+    if (bloco.liberado && bloco.totais && typeof bloco.totais === 'object') {
+      Object.keys(bloco.totais).forEach(function (nome) { totais[nome] = Number(bloco.totais[nome]) || 0; });
+    }
+    saida[cat] = { liberado: Boolean(bloco.liberado), totais: totais, liberadoEm: Number(bloco.liberado_em) || 0 };
+  });
+  return saida;
+}
 function _mapPonto(d) {
   var r = d.data();
   return {
@@ -277,11 +312,17 @@ function onSync(callback) {
 function _notifySync() {
   if (_syncAgendado) return;
   _syncAgendado = true;
-  var agendar = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
-  agendar(function () {
+  /* Aba em segundo plano não recebe animation frames: um timer garante que a atualização (e o som
+     dos lances) aconteça mesmo assim. Quem chegar primeiro dispara, uma única vez. */
+  var feito = false;
+  function disparar() {
+    if (feito) return;
+    feito = true;
     _syncAgendado = false;
     window.dispatchEvent(new Event('jes2026-data-changed'));
-  });
+  }
+  if (window.requestAnimationFrame && !document.hidden) window.requestAnimationFrame(disparar);
+  setTimeout(disparar, document.hidden ? 16 : 100);
 }
 
 /* ---- Estado de sincronização (indicador "ao vivo / salvando / offline") ---- */
@@ -395,6 +436,7 @@ var LANCES = {
   cartao_vermelho: { rotulo: 'Cartão vermelho', curto: 'Vermelho' },
   exclusao: { rotulo: 'Exclusão de 2 minutos', curto: "2 min" },
   falta: { rotulo: 'Falta', curto: 'Falta' },
+  /* Não aparece mais nos botões da mesa; fica só para exibir lances antigos já gravados */
   substituicao: { rotulo: 'Substituição', curto: 'Troca' }
 };
 
@@ -412,11 +454,11 @@ function _perfilPorNome(n) {
 }
 
 function _lancesDoPerfil(perfil, n) {
-  if (perfil === 'basquete') return ['falta', 'substituicao'];
-  if (perfil === 'volei') return ['substituicao'];
+  if (perfil === 'basquete') return ['falta'];
+  if (perfil === 'volei') return [];
   if (perfil === 'mesa' || perfil === 'pontos' || n.indexOf('pebolim') !== -1) return [];
-  if (n.indexOf('handebol') !== -1 || n.indexOf('handball') !== -1) return ['cartao_amarelo', 'exclusao', 'cartao_vermelho', 'substituicao'];
-  return ['cartao_amarelo', 'cartao_vermelho', 'substituicao'];
+  if (n.indexOf('handebol') !== -1 || n.indexOf('handball') !== -1) return ['cartao_amarelo', 'exclusao', 'cartao_vermelho'];
+  return ['cartao_amarelo', 'cartao_vermelho'];
 }
 
 function getRegraModalidade(nome) {
@@ -623,20 +665,25 @@ function getJogosAbertosAntigos() {
   });
 }
 
-/* Classificação: com modalidade, soma só os pontos ligados a jogos daquele esporte */
+/* Classificação: com modalidade, soma só os pontos ligados a jogos daquele esporte.
+   Na classificação geral entram também os Valores Olímpicos, mas só depois que o
+   administrador libera (antes disso o público não recebe esses números). */
 function getClassificacao(modalidadeNome) {
   var equipes = _filterCat(_db.equipes);
   var pontosJogos = _filterCat(_db.pontosJogos);
-  if (modalidadeNome && modalidadeNome !== 'all') {
+  var geral = !modalidadeNome || modalidadeNome === 'all';
+  if (!geral) {
     pontosJogos = pontosJogos.filter(function (p) {
       var jogo = p.jogoId ? getJogoById(p.jogoId) : null;
       return Boolean(jogo) && jogo.modalidade === modalidadeNome;
     });
   }
+  var publicados = geral ? getValoresPublicados() : { liberado: false, totais: {} };
   var classificacao = equipes.map(function (eq) {
-    var total = pontosJogos.filter(function (p) { return p.equipeNome === eq.nome; })
+    var doJogos = pontosJogos.filter(function (p) { return p.equipeNome === eq.nome; })
       .reduce(function (sum, p) { return sum + (parseInt(p.pontos, 10) || 0); }, 0);
-    return { id: eq.id, unidade: eq.nome, pontos: total };
+    var valores = publicados.liberado ? (Number(publicados.totais[eq.nome]) || 0) : 0;
+    return { id: eq.id, unidade: eq.nome, pontosJogos: doJogos, valores: valores, pontos: doJogos + valores };
   });
   classificacao.sort(function (a, b) { return b.pontos - a.pontos || a.unidade.localeCompare(b.unidade); });
   classificacao.forEach(function (row, i) { row.posicao = i + 1; });
@@ -906,7 +953,7 @@ async function desfazerPonto(jogoId, time) {
   return _rastrear(batch.commit());
 }
 
-/* Lance sem pontuação: cartões, faltas, substituições, anotações */
+/* Lance sem pontuação: cartões, faltas, anotações */
 async function registrarLance(jogoId, tipo, time, descricao) {
   var jogo = _jogo(jogoId);
   if (!jogo) return false;
@@ -1114,6 +1161,15 @@ async function atualizarEquipe(id, dados) {
     _db.pontosJogos.forEach(function (p) {
       if (p.equipeNome === antigo && p.categoria === equipe.categoria) batch.update(doc(db, 'pontos_jogos', p.id), { equipe_nome: row.nome });
     });
+    _db.valoresOlimpicos.forEach(function (v) {
+      if (v.equipeNome === antigo && v.categoria === equipe.categoria) batch.update(doc(db, 'valores_olimpicos', v.id), { equipe_nome: row.nome });
+    });
+    var publicado = getValoresPublicados(equipe.categoria);
+    if (publicado.liberado) {
+      var totais = Object.assign({}, publicado.totais);
+      if (Object.prototype.hasOwnProperty.call(totais, antigo)) { totais[row.nome] = totais[antigo]; delete totais[antigo]; }
+      _gravarBlocoValores(batch, equipe.categoria, _blocoValores(true, totais, publicado.liberadoEm));
+    }
   }
   return _rastrear(batch.commit());
 }
@@ -1254,6 +1310,99 @@ async function removerPonto(pontoId) {
   return _rastrear(deleteDoc(doc(getDb(), 'pontos_jogos', String(pontoId))));
 }
 
+/* ---- Valores Olímpicos ----
+   Pontos de conduta (trabalho em equipe, respeito...) que independem do placar. Podem ser
+   positivos (bônus) ou negativos (penalidade). Ficam escondidos até o administrador liberar:
+   os lançamentos vivem numa coleção que as páginas públicas nem baixam, e só os TOTAIS são
+   publicados (em config/valores_olimpicos) quando ele libera o turno. */
+function getValoresPublicados(cat) {
+  var c = _db.valoresConfig[cat || _categoriaAtual];
+  return c && c.liberado ? c : { liberado: false, totais: {}, liberadoEm: 0 };
+}
+function valoresLiberados(cat) { return getValoresPublicados(cat).liberado; }
+
+/* Visão do painel (administrador): lançamentos reais, mesmo antes de liberar */
+function getValoresPorEquipe(equipeNome) {
+  return _db.valoresOlimpicos.filter(function (v) {
+    return v.equipeNome === equipeNome && v.categoria === _categoriaAtual;
+  }).sort(function (a, b) { return b.criadoEm - a.criadoEm; });
+}
+function getTotalValoresEquipe(equipeNome) {
+  return getValoresPorEquipe(equipeNome).reduce(function (soma, v) { return soma + v.pontos; }, 0);
+}
+
+function _refConfigValores() { return doc(getDb(), 'config', 'valores_olimpicos'); }
+
+/* Soma por equipe do turno; ajuste simula um lançamento a mais ou a menos antes de gravar */
+function _totaisValores(cat, ajuste) {
+  var totais = {};
+  _db.equipes.forEach(function (e) { if (e.categoria === cat) totais[e.nome] = 0; });
+  _db.valoresOlimpicos.forEach(function (v) {
+    if (v.categoria !== cat || (ajuste && ajuste.removerId === v.id)) return;
+    totais[v.equipeNome] = (totais[v.equipeNome] || 0) + v.pontos;
+  });
+  if (ajuste && ajuste.adicionar) {
+    totais[ajuste.adicionar.equipeNome] = (totais[ajuste.adicionar.equipeNome] || 0) + ajuste.adicionar.pontos;
+  }
+  return totais;
+}
+
+function _blocoValores(liberado, totais, liberadoEm) {
+  return { liberado: liberado, totais: liberado ? totais : {}, liberado_em: liberado ? (liberadoEm || Date.now()) : 0 };
+}
+function _gravarBlocoValores(escritor, cat, bloco) {
+  var dados = {};
+  dados[cat] = bloco;
+  /* mergeFields troca o bloco do turno inteiro (sem sobrar total de equipe apagada) e preserva o outro turno */
+  var opcoes = { mergeFields: [cat] };
+  if (typeof escritor.commit === 'function') return escritor.set(_refConfigValores(), dados, opcoes);
+  return setDoc(_refConfigValores(), dados, opcoes);
+}
+
+async function adicionarValor(equipeNome, pontos, criterio, descricao) {
+  var valorPontos = parseInt(pontos, 10) || 0;
+  if (!equipeNome || !valorPontos) return false;
+  var cat = _categoriaAtual;
+  var db = getDb();
+  var batch = writeBatch(db);
+  batch.set(doc(collection(db, 'valores_olimpicos')), {
+    equipe_nome: equipeNome,
+    pontos: valorPontos,
+    criterio: String(criterio || '').trim(),
+    descricao: String(descricao || '').trim(),
+    categoria: cat,
+    criado_em: Date.now()
+  });
+  /* Já liberado: os totais públicos acompanham o lançamento na mesma gravação */
+  var publicado = getValoresPublicados(cat);
+  if (publicado.liberado) {
+    _gravarBlocoValores(batch, cat, _blocoValores(true, _totaisValores(cat, { adicionar: { equipeNome: equipeNome, pontos: valorPontos } }), publicado.liberadoEm));
+  }
+  return _rastrear(batch.commit());
+}
+
+async function removerValor(valorId) {
+  var valor = _db.valoresOlimpicos.find(function (v) { return v.id === valorId; });
+  if (!valor) return false;
+  var db = getDb();
+  var batch = writeBatch(db);
+  batch.delete(doc(db, 'valores_olimpicos', valorId));
+  var publicado = getValoresPublicados(valor.categoria);
+  if (publicado.liberado) {
+    _gravarBlocoValores(batch, valor.categoria, _blocoValores(true, _totaisValores(valor.categoria, { removerId: valorId }), publicado.liberadoEm));
+  }
+  return _rastrear(batch.commit());
+}
+
+/* Libera (ou volta a esconder) os Valores Olímpicos do turno ativo */
+async function liberarValores() {
+  var cat = _categoriaAtual;
+  return _rastrear(_gravarBlocoValores(getDb(), cat, _blocoValores(true, _totaisValores(cat))));
+}
+async function ocultarValores() {
+  return _rastrear(_gravarBlocoValores(getDb(), _categoriaAtual, _blocoValores(false, {})));
+}
+
 /* ---- Expor funções globalmente (app.js é module, outros scripts não são) ---- */
 Object.assign(window, {
   _db: _db,
@@ -1340,7 +1489,15 @@ Object.assign(window, {
   atualizarUsuario: atualizarUsuario,
   apagarUsuario: apagarUsuario,
   adicionarPonto: adicionarPonto,
-  removerPonto: removerPonto
+  removerPonto: removerPonto,
+  getValoresPublicados: getValoresPublicados,
+  valoresLiberados: valoresLiberados,
+  getValoresPorEquipe: getValoresPorEquipe,
+  getTotalValoresEquipe: getTotalValoresEquipe,
+  adicionarValor: adicionarValor,
+  removerValor: removerValor,
+  liberarValores: liberarValores,
+  ocultarValores: ocultarValores
 });
 
 /* Iniciada quando o firebase-setup carrega — mas como ambos são modules,

@@ -11,6 +11,7 @@ var cadastroAtual = 'equipes';
 var brasaoAtual = '';
 var regraCounter = 0;
 var equipeDetalheSelecionada = null;
+var equipeValoresSelecionada = null;
 var encerradasAbertas = false;
 var filtrosJogos = { busca: '', modalidade: 'all', periodo: 'all', status: 'all' };
 
@@ -26,6 +27,7 @@ document.addEventListener('DOMContentLoaded', function () {
   configurarMesa();
   configurarJogos();
   configurarClassificacao();
+  configurarValores();
   configurarCadastros();
   configurarModais();
 
@@ -59,6 +61,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var jogo = jogoSelecionadoLive ? getJogoById(jogoSelecionadoLive) : null;
       if (jogo && jogo.categoria !== getCategoria() && jogo.categoria !== 'ambas') jogoSelecionadoLive = null;
       equipeDetalheSelecionada = null;
+      equipeValoresSelecionada = null;
       renderTudo();
     });
     setInterval(atualizarRelogios, 1000);
@@ -114,12 +117,13 @@ function configurarNavegacao() {
     var acao = alvo.getAttribute('data-acao-global');
     if (acao === 'novo-jogo') abrirModalNovoJogo();
     else if (acao === 'registrar-pontos') abrirModalPonto(equipeDetalheSelecionada);
+    else if (acao === 'registrar-valores') abrirModalValor(equipeValoresSelecionada);
     else if (acao === 'ver-jogos') mostrarView('jogos');
   });
 }
 
 function mostrarView(view) {
-  if ((view === 'classificacao' || view === 'cadastros') && !isMaster()) view = 'aovivo';
+  if ((view === 'classificacao' || view === 'valores' || view === 'cadastros') && !isMaster()) view = 'aovivo';
   /* Tocar de novo em "Ao vivo" com uma mesa aberta volta para a lista de partidas */
   if (view === 'aovivo' && viewAtual === 'aovivo' && jogoSelecionadoLive) jogoSelecionadoLive = null;
   viewAtual = view;
@@ -140,6 +144,7 @@ function renderTudo() {
   if (viewAtual === 'aovivo') renderLivePanel();
   else if (viewAtual === 'jogos') renderAgenda();
   else if (viewAtual === 'classificacao') renderClassificacaoAdmin();
+  else if (viewAtual === 'valores') renderValoresAdmin();
   else if (viewAtual === 'cadastros') renderCadastros();
   atualizarRelogios();
 }
@@ -516,8 +521,17 @@ function htmlMesaTimeline(jogo) {
    AO VIVO — AÇÕES DA MESA
    O retorno visual é imediato; o Firestore confirma em segundo plano
    ===================================================== */
+var SOM_DA_MESA = {
+  gol: ['ponto', 'gol'], cesta: ['ponto', 'cesta'], cesta3: ['ponto', 'cesta3'], ll: ['ponto', 'll'], ponto: ['ponto', 'ponto'],
+  set: ['set', 'set'], amarelo: ['cartao', 'amarelo'], vermelho: ['cartao', 'vermelho'], exclusao: ['cartao', 'exclusao'],
+  inicio: ['inicio', 'inicio'], pausa: ['pausa', 'pausa'], fim: ['fim', 'fim']
+};
+
 function fxMesa(opcoes) {
   JESFX.banner(Object.assign({ compacto: true }, opcoes));
+  /* Som de quem opera a mesa (se ligado no botão de som): ponto = confirmação curta; demais lances = efeito normal */
+  var som = SOM_DA_MESA[opcoes.variante];
+  if (som && typeof JESAudio !== 'undefined') JESAudio.evento(som[0], som[1], 'mesa');
 }
 
 function placarTexto(jogo) {
@@ -968,6 +982,161 @@ async function confirmarApagarPonto(id) {
 }
 
 /* =====================================================
+   VALORES OLÍMPICOS (master)
+   Pontos de conduta (bônus ou penalidade) que não dependem do placar.
+   Ficam só aqui no painel até o administrador liberar para o público.
+   ===================================================== */
+function configurarValores() {
+  document.getElementById('lista-valores').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-valores-detalhe]');
+    if (!btn) return;
+    var nome = btn.getAttribute('data-valores-detalhe');
+    equipeValoresSelecionada = equipeValoresSelecionada === nome ? null : nome;
+    renderValoresAdmin();
+  });
+  document.getElementById('valores-detalhe-container').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-remover-valor]');
+    if (btn) confirmarApagarValor(btn.getAttribute('data-remover-valor'));
+  });
+  document.getElementById('btn-valores-publicar').addEventListener('click', alternarPublicacaoValores);
+}
+
+function formatarPontosComSinal(n) {
+  return (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n);
+}
+
+function renderValoresAdmin() {
+  var publicado = getValoresPublicados();
+  var turno = getTurno().nome;
+  var status = document.getElementById('valores-status');
+  status.className = 'valores-status' + (publicado.liberado ? ' is-publicado' : '');
+  status.textContent = publicado.liberado ? 'Visível ao público' : 'Oculto do público';
+
+  var botao = document.getElementById('btn-valores-publicar');
+  botao.textContent = publicado.liberado ? 'Ocultar novamente' : 'Liberar para o público';
+
+  document.getElementById('valores-aviso').textContent = publicado.liberado
+    ? 'Liberado em ' + new Date(publicado.liberadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) +
+      '. O total de cada equipe já soma na classificação geral do turno da ' + turno.toLowerCase() + '; novos lançamentos aparecem na hora.'
+    : 'Ninguém além da organização vê estes pontos. Ao liberar, o total de cada equipe passa a somar na classificação geral do turno da ' + turno.toLowerCase() + '.';
+
+  var base = {};
+  getClassificacao().forEach(function (item) { base[item.unidade] = item.pontosJogos; });
+  var linhas = getEquipes().map(function (eq) {
+    var valores = getTotalValoresEquipe(eq.nome);
+    var jogos = base[eq.nome] || 0;
+    return { nome: eq.nome, valores: valores, jogos: jogos, total: jogos + valores, registros: getValoresPorEquipe(eq.nome).length };
+  }).sort(function (a, b) { return b.total - a.total || a.nome.localeCompare(b.nome, 'pt-BR'); });
+
+  var lista = document.getElementById('lista-valores');
+  if (!linhas.length) {
+    renderSeMudou(lista, htmlVazio('Nenhuma equipe no turno', 'Cadastre as equipes na seção Cadastros.', { icone: 'usuarios' }));
+  } else {
+    renderSeMudou(lista, linhas.map(function (item, i) {
+      var selecionada = item.nome === equipeValoresSelecionada;
+      return '<div class="cad-linha' + (selecionada ? ' is-selecionada' : '') + '">' +
+        '<span class="cad-linha__pos">' + (i + 1) + 'º</span>' +
+        htmlBrasao(item.nome, 'brasao--md') +
+        '<span class="cad-linha__principal"><b>' + escapeHtml(item.nome) + '</b><span class="cad-linha__meta">' +
+          item.registros + (item.registros === 1 ? ' registro' : ' registros') + ' · jogos ' + item.jogos + ' → total ' + item.total + '</span></span>' +
+        '<span class="cad-linha__pts">' + formatarPontosComSinal(item.valores) + '<small>val.</small></span>' +
+        '<span class="cad-linha__acoes"><button type="button" class="btn btn--sm ' + (selecionada ? 'btn--escuro' : 'btn--secundario') + '" data-valores-detalhe="' + escapeHtml(item.nome) + '">' + (selecionada ? 'Fechar' : 'Registros') + '</button></span>' +
+      '</div>';
+    }).join(''));
+  }
+  renderValoresDetalhe();
+}
+
+function renderValoresDetalhe() {
+  var container = document.getElementById('valores-detalhe-container');
+  if (!equipeValoresSelecionada) {
+    renderSeMudou(container, '<div class="painel detalhe-pontos">' + htmlVazio('Como funciona', 'A ordem ao lado já considera jogos + valores, para você conferir o resultado antes de liberar. Toque em "Registros" para ver ou corrigir os lançamentos.', { compacto: true }) + '</div>');
+    return;
+  }
+  var itens = getValoresPorEquipe(equipeValoresSelecionada);
+  var html = '<div class="painel detalhe-pontos"><div class="painel__head">' +
+    '<h2 class="titulo-secao titulo-secao--sm">' + escapeHtml(equipeValoresSelecionada) + '</h2>' +
+    '<button type="button" class="btn btn--sm btn--primario-suave" data-acao-global="registrar-valores">' + icone('mais') + 'Valores</button>' +
+  '</div>';
+  if (!itens.length) {
+    html += '<p class="feed__vazio">Nenhum lançamento para esta equipe.</p>';
+  } else {
+    html += itens.map(function (v) {
+      var quando = v.criadoEm ? new Date(v.criadoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      var detalhe = [v.descricao, quando].filter(Boolean).join(' · ');
+      return '<div class="detalhe-pontos__item">' +
+        '<b class="' + (v.pontos < 0 ? 'is-negativo' : '') + '">' + formatarPontosComSinal(v.pontos) + '</b>' +
+        '<span><strong>' + escapeHtml(v.criterio || (v.pontos < 0 ? 'Penalidade' : 'Bônus')) + '</strong><small>' + escapeHtml(detalhe) + '</small></span>' +
+        '<button type="button" class="icon-btn icon-btn--sm icon-btn--perigo" data-remover-valor="' + escapeHtml(v.id) + '" title="Remover lançamento" aria-label="Remover lançamento">' + icone('lixeira') + '</button>' +
+      '</div>';
+    }).join('');
+  }
+  renderSeMudou(container, html + '</div>');
+}
+
+function abrirModalValor(equipePreSelecionada) {
+  var equipes = getEquipes().slice().sort(ordenarEquipes);
+  if (!equipes.length) { avisar('Nenhuma equipe', 'Cadastre equipes antes de registrar Valores Olímpicos.'); return; }
+  document.getElementById('form-valor').reset();
+  var select = document.getElementById('valor_equipe');
+  select.innerHTML = '<option value="">Selecione…</option>' + equipes.map(function (e) {
+    return '<option value="' + escapeHtml(e.nome) + '">' + escapeHtml(e.nome) + '</option>';
+  }).join('');
+  select.value = equipePreSelecionada && equipes.some(function (e) { return e.nome === equipePreSelecionada; }) ? equipePreSelecionada : '';
+  document.getElementById('valor_quantidade').value = '1';
+  abrirModal('modal-valor');
+}
+
+function salvarValorForm(e) {
+  e.preventDefault();
+  var equipe = valor('valor_equipe');
+  var quantidade = parseInt(valor('valor_quantidade'), 10);
+  if (!equipe) { mostrarToast('Selecione a equipe.', 'erro'); return; }
+  if (!quantidade || quantidade < 1) { mostrarToast('Informe quantos pontos (1 ou mais).', 'erro'); return; }
+  var penalidade = valor('valor_tipo') === 'penalidade';
+  var pontos = penalidade ? -quantidade : quantidade;
+  executar(adicionarValor(equipe, pontos, valor('valor_criterio'), valor('valor_descricao')));
+  equipeValoresSelecionada = equipe;
+  fecharTodosModais();
+  mostrarToast(formatarPontosComSinal(pontos) + (Math.abs(pontos) === 1 ? ' ponto' : ' pontos') + ' de valores para ' + equipe + (valoresLiberados() ? '.' : ' (ainda oculto do público).'), 'sucesso');
+  if (viewAtual === 'valores') renderValoresAdmin();
+}
+
+async function confirmarApagarValor(id) {
+  var ok = await confirmarAcao({
+    titulo: 'Remover lançamento?',
+    texto: valoresLiberados() ? 'Os pontos saem do total e da classificação pública na hora.' : 'Os pontos saem do total desta equipe.',
+    confirmar: 'Remover', perigo: true
+  });
+  if (!ok) return;
+  executar(removerValor(String(id)));
+}
+
+async function alternarPublicacaoValores() {
+  var turno = getTurno().nome;
+  if (valoresLiberados()) {
+    var ocultar = await confirmarAcao({
+      titulo: 'Ocultar de novo?',
+      texto: 'Os Valores Olímpicos do turno da ' + turno.toLowerCase() + ' somem da classificação pública. Os lançamentos continuam guardados no painel.',
+      confirmar: 'Ocultar', perigo: true
+    });
+    if (!ocultar) return;
+    executar(ocultarValores());
+    mostrarToast('Valores Olímpicos ocultados do público.', 'info');
+    return;
+  }
+  var registros = getEquipes().reduce(function (soma, eq) { return soma + getValoresPorEquipe(eq.nome).length; }, 0);
+  var liberar = await confirmarAcao({
+    titulo: 'Liberar Valores Olímpicos?',
+    texto: 'Todos vão ver, na classificação geral do turno da ' + turno.toLowerCase() + ', o total de cada equipe somado aos pontos dos jogos (' + registros + (registros === 1 ? ' lançamento' : ' lançamentos') + '). Você pode ocultar de novo depois.',
+    confirmar: 'Liberar'
+  });
+  if (!liberar) return;
+  executar(liberarValores());
+  mostrarToast('Valores Olímpicos liberados para o público.', 'sucesso');
+}
+
+/* =====================================================
    CADASTROS (master): equipes, modalidades, regulamentos, usuários
    ===================================================== */
 var TEXTOS_CADASTRO = {
@@ -1117,6 +1286,7 @@ function configurarModais() {
   document.getElementById('form-modalidade').addEventListener('submit', salvarModalidade);
   document.getElementById('nome_modalidade').addEventListener('input', atualizarDicaModalidade);
   document.getElementById('form-ponto').addEventListener('submit', salvarPontoForm);
+  document.getElementById('form-valor').addEventListener('submit', salvarValorForm);
   document.getElementById('ponto_equipe').addEventListener('change', atualizarJogosPorEquipe);
   document.getElementById('form-regulamento').addEventListener('submit', salvarRegulamentoForm);
   document.getElementById('btn-add-regra').addEventListener('click', function () { adicionarRegraLinha(); });
